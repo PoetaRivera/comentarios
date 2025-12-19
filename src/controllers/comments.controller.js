@@ -1,11 +1,13 @@
 const { db } = require('../config/firebase');
+const { sanitizeId } = require('../utils/sanitizer');
 
 // Create a new comment
 const createComment = async (req, res) => {
     console.log('createComment called');
     try {
-        const { appId } = req.params;
-        console.log('AppID:', appId);
+        const rawAppId = req.params.appId;
+        const appId = sanitizeId(rawAppId);
+        console.log('AppID (Raw):', rawAppId, ' -> (Sanitized):', appId);
         const { author, content, metadata } = req.body;
 
         if (!content) {
@@ -39,7 +41,8 @@ const createComment = async (req, res) => {
 // Get comments for an app
 const getComments = async (req, res) => {
     try {
-        const { appId } = req.params;
+        const rawAppId = req.params.appId;
+        const appId = sanitizeId(rawAppId);
         const { limit = 20, startAfter } = req.query;
 
         let query = db.collection('apps').doc(appId).collection('comments')
