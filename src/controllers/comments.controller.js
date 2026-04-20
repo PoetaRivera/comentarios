@@ -1,13 +1,9 @@
 const { db } = require('../config/firebase');
 const { sanitizeId } = require('../utils/sanitizer');
 
-// Create a new comment
 const createComment = async (req, res) => {
-    console.log('createComment called');
     try {
-        const rawAppId = req.params.appId;
-        const appId = sanitizeId(rawAppId);
-        console.log('AppID (Raw):', rawAppId, ' -> (Sanitized):', appId);
+        const appId = sanitizeId(req.params.appId);
         const { author, content, metadata } = req.body;
 
         if (!content) {
@@ -18,14 +14,11 @@ const createComment = async (req, res) => {
             author: author || 'Anonymous',
             content,
             createdAt: new Date(),
-            isVisible: true, // Default to visible
+            isVisible: true,
             metadata: metadata || {}
         };
 
-        console.log('Writing to Firestore...');
-        // Add to 'comments' subcollection under specific 'apps' document
         const docRef = await db.collection('apps').doc(appId).collection('comments').add(newComment);
-        console.log('Firestore write success. ID:', docRef.id);
 
         return res.status(201).json({
             id: docRef.id,
@@ -34,47 +27,86 @@ const createComment = async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating comment:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Error al crear el comentario' });
     }
 };
 
-// Get comments for an app
 const getComments = async (req, res) => {
     try {
-        const rawAppId = req.params.appId;
-        const appId = sanitizeId(rawAppId);
+        const appId = sanitizeId(req.params.appId);
         const { limit = 20, startAfter } = req.query;
 
         let query = db.collection('apps').doc(appId).collection('comments')
-            // .where('isVisible', '==', true) // Requires index with orderBy
+            .where('isVisible', '==', true)
             .orderBy('createdAt', 'desc')
             .limit(parseInt(limit));
 
-        // Pagination logic could go here if we passed a doc snapshot, 
-        // but for simple API usually we pass a timestamp or ID. 
-        // For simplicity in this first version, we'll stick to basic queries.
+        if (startAfter) {
+            const cursorDoc = await db.collection('apps').doc(appId).collection('comments').doc(startAfter).get();
+            if (cursorDoc.exists) {
+                query = query.startAfter(cursorDoc);
+            }
+        }
 
         const snapshot = await query.get();
 
-        if (snapshot.empty) {
-            return res.status(200).json([]);
-        }
+        if (snapshot.empty) return res.status(200).json([]);
 
-        const comments = [];
-        snapshot.forEach(doc => {
-            comments.push({ id: doc.id, ...doc.data() });
-        });
-
+        const comments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         return res.status(200).json(comments);
 
     } catch (error) {
         console.error('Error fetching comments:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: 'Error al obtener los comentarios' });
     }
 };
 
-module.exports = {
-    createComment,
-    getComments
+const updateComment = async (req, res) => {
+    try {
+        const appId = sanitizeId(req.params.appId);
+        const { commentId } = req.params;
+        const { content } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ error: 'Content is required' });
+        }
+
+        const ref = db.collection('apps').doc(appId).collection('comments').doc(commentId);
+        const doc = await ref.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({ error: 'Comentario no encontrado' });
+        }
+
+        await ref.update({ content, updatedAt: new Date() });
+        return res.status(200).json({ message: 'Comentario actualizado' });
+
+    } catch (error) {
+        console.error('Error updating comment:', error);
+        return res.status(500).json({ error: 'Error al actualizar el comentario' });
+    }
 };
 
+const deleteComment = async (req, res) => {
+    try {
+        const appId = sanitizeId(req.params.appId);
+        const { commentId } = req.params;
+
+        const ref = db.collection('apps').doc(appId).collection('comments').doc(commentId);
+        const doc = await ref.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({ error: 'Comentario no encontrado' });
+        }
+
+        // Soft delete
+        await ref.update({ isVisible: false });
+        return res.status(200).json({ message: 'Comentario eliminado' });
+
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        return res.status(500).json({ error: 'Error al eliminar el comentario' });
+    }
+};
+
+module.exports = { createComment, getComments, updateComment, deleteComment };

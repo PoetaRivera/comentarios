@@ -5,8 +5,18 @@ const commentsRoutes = require('./routes/comments.routes');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+const allowedOrigins = [
+    'https://poetarivera.github.io',
+    'http://localhost:3000',
+    'http://127.0.0.1:5500',
+];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error('CORS: origen no permitido'));
+    }
+}));
 app.use(morgan('dev'));
 app.use(express.json());
 

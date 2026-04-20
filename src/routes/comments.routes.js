@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { createComment, getComments } = require('../controllers/comments.controller');
+const { createComment, getComments, updateComment, deleteComment } = require('../controllers/comments.controller');
 
-// POST /api/comments/:appId
 router.post('/:appId', createComment);
-
-// GET /api/comments/:appId
 router.get('/:appId', getComments);
+router.put('/:appId/:commentId', updateComment);
+router.delete('/:appId/:commentId', deleteComment);
 
 module.exports = router;
